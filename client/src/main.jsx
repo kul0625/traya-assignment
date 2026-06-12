@@ -54,7 +54,7 @@ function App() {
   }, [filters]);
 
   async function fetchTests() {
-    const response = await fetch(`${API_BASE_URL}/api/tests?${filteredQuery}`);
+    const response = await fetch(`/api/tests?${filteredQuery}`);
     const data = await response.json();
 
     if (!response.ok) {
