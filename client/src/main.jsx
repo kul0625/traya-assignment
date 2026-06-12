@@ -12,8 +12,9 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import './styles.css';
-console.log(import.meta.env.VITE_API_BASE_URL)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').trim();
+const terminalStatuses = new Set(['completed', 'failed']);
 
 const defaultForm = {
   targetUrl: 'https://jsonplaceholder.typicode.com/posts',
@@ -88,15 +89,73 @@ function App() {
       return undefined;
     }
 
+    let closed = false;
+    let fallbackTimer = null;
+
+    const upsertTest = (test) => {
+      setActiveTest(test);
+      setTests((currentTests) => {
+        const exists = currentTests.some((currentTest) => currentTest.id === test.id);
+
+        if (!exists) {
+          return [test, ...currentTests];
+        }
+
+        return currentTests.map((currentTest) => (currentTest.id === test.id ? test : currentTest));
+      });
+    };
+
+    const pollUntilFinished = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/tests/${activeTestId}`);
+        const test = await response.json();
+
+        if (!response.ok) {
+          throw new Error(test.error || 'Unable to fetch test');
+        }
+
+        upsertTest(test);
+
+        if (!terminalStatuses.has(test.status) && !closed) {
+          fallbackTimer = window.setTimeout(pollUntilFinished, 1200);
+        }
+      } catch (error) {
+        setMessage(error.message);
+      }
+    };
+
     fetchActiveTest(activeTestId).catch((error) => setMessage(error.message));
 
-    const timer = setInterval(() => {
-      fetchActiveTest(activeTestId).catch((error) => setMessage(error.message));
-      fetchTests().catch(() => {});
-    }, 1200);
+    const events = new EventSource(`${API_BASE_URL}/api/tests/${activeTestId}/events`);
 
-    return () => clearInterval(timer);
-  }, [activeTestId, filteredQuery]);
+    events.addEventListener('test-update', (event) => {
+      const test = JSON.parse(event.data);
+      upsertTest(test);
+
+      if (terminalStatuses.has(test.status)) {
+        closed = true;
+        events.close();
+      }
+    });
+
+    events.onerror = () => {
+      if (closed) {
+        return;
+      }
+
+      events.close();
+      pollUntilFinished();
+    };
+
+    return () => {
+      closed = true;
+      events.close();
+
+      if (fallbackTimer) {
+        window.clearTimeout(fallbackTimer);
+      }
+    };
+  }, [activeTestId]);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));

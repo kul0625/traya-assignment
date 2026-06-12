@@ -1,4 +1,5 @@
 const loadTestService = require('../services/loadTestService');
+const testEventService = require('../services/testEventService');
 
 async function createTest(req, res, next) {
   try {
@@ -35,8 +36,52 @@ async function listTests(req, res, next) {
   }
 }
 
+async function streamTestEvents(req, res, next) {
+  try {
+    const test = await loadTestService.getTest(req.params.id);
+
+    if (!test) {
+      return res.status(404).json({ error: 'Load test not found' });
+    }
+
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    res.flushHeaders?.();
+
+    const send = (updatedTest) => {
+      res.write('event: test-update\n');
+      res.write(`data: ${JSON.stringify(updatedTest)}\n\n`);
+    };
+
+    send(test);
+
+    if (['completed', 'failed'].includes(test.status)) {
+      res.end();
+      return undefined;
+    }
+
+    const unsubscribe = testEventService.subscribe(req.params.id, (updatedTest) => {
+      send(updatedTest);
+
+      if (['completed', 'failed'].includes(updatedTest.status)) {
+        unsubscribe();
+        res.end();
+      }
+    });
+
+    req.on('close', unsubscribe);
+    return undefined;
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports = {
   createTest,
   getTest,
   listTests,
+  streamTestEvents,
 };

@@ -4,16 +4,18 @@ const metricsService = require('./metricsService');
 const filterService = require('./filterService');
 const { createRateLimiter } = require('./rateLimiterService');
 const config = require('../config/loadTestConfig');
+const testEventService = require('./testEventService');
 
 const activeTests = new Set();
 const queuedTests = [];
 
 async function createTest(input) {
   const test = createLoadTest(input);
-  await repository.create(test);
+  const createdTest = await repository.create(test);
   queuedTests.push(test.id);
+  testEventService.publish(createdTest);
   drainQueue();
-  return test;
+  return createdTest;
 }
 
 async function getTest(id) {
@@ -31,11 +33,12 @@ function drainQueue() {
     activeTests.add(testId);
     runTest(testId)
       .catch(async (error) => {
-        await repository.update(testId, {
+        const failedTest = await repository.update(testId, {
           status: 'failed',
           requestErrors: [{ message: error.message, occurredAt: new Date().toISOString() }],
           completedAt: new Date().toISOString(),
         });
+        testEventService.publish(failedTest);
       })
       .finally(() => {
         activeTests.delete(testId);
@@ -52,7 +55,8 @@ async function runTest(testId) {
   }
 
   const startedAt = new Date().toISOString();
-  await repository.update(testId, { status: 'running', startedAt });
+  const runningTest = await repository.update(testId, { status: 'running', startedAt });
+  testEventService.publish(runningTest);
 
   const results = [];
   let nextRequestNumber = 0;
@@ -70,7 +74,7 @@ async function runTest(testId) {
       const successful = completed - failed;
 
       if (completed === test.requestCount || completed % Math.max(1, Math.floor(test.requestCount / 50)) === 0) {
-        await repository.update(testId, {
+        const updatedTest = await repository.update(testId, {
           progress: {
             total: test.requestCount,
             completed,
@@ -80,6 +84,7 @@ async function runTest(testId) {
           },
           requestErrors: collectSampleErrors(results),
         });
+        testEventService.publish(updatedTest);
       }
     }
   }
@@ -90,7 +95,7 @@ async function runTest(testId) {
   const completedAt = new Date().toISOString();
   const metrics = metricsService.summarize(results, startedAt, completedAt);
 
-  await repository.update(testId, {
+  const completedTest = await repository.update(testId, {
     status: 'completed',
     progress: {
       total: test.requestCount,
@@ -103,6 +108,7 @@ async function runTest(testId) {
     requestErrors: collectSampleErrors(results),
     completedAt,
   });
+  testEventService.publish(completedTest);
 }
 
 async function executeRequest(test) {
