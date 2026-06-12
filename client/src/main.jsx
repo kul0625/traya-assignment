@@ -54,7 +54,7 @@ function App() {
   }, [filters]);
 
   async function fetchTests() {
-    const response = await fetch(`/api/tests?${filteredQuery}`);
+    const response = await fetch(`${API_BASE_URL}/api/tests?${filteredQuery}`);
     const data = await response.json();
 
     if (!response.ok) {
@@ -69,7 +69,7 @@ function App() {
       return;
     }
 
-    const response = await fetch(`/api/tests/${id}`);
+    const response = await fetch(`${API_BASE_URL}/api/tests/${id}`);
     const data = await response.json();
 
     if (!response.ok) {
@@ -115,7 +115,7 @@ function App() {
       const headers = form.headers.trim() ? JSON.parse(form.headers) : {};
       const payload = form.payload.trim() ? JSON.parse(form.payload) : null;
 
-      const response = await fetch(`/api/tests`, {
+      const response = await fetch(`${API_BASE_URL}/api/tests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
