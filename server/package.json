@@ -1,0 +1,21 @@
+{
+  "name": "load-testing-platform-server",
+  "version": "1.0.0",
+  "description": "MVC Node.js API for the distributed load testing platform",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node index.js",
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "mongoose": "^9.7.0"
+  }
+}
